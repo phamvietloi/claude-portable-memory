@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  manifests:
+    name: Validate plugin manifests
+    runs-on: ubuntu-latest
+    env:
+      # Point the CLI at a throwaway config so it never reads or writes a real
+      # one. `claude plugin validate` is a local file check: it needs no login,
+      # verified locally against Claude Code 2.1.274 with a fresh config dir.
+      # NOTE: the `runner` context is not available in job-level `env`, only in
+      # steps — using it here fails the whole workflow at startup with zero jobs.
+      CLAUDE_CONFIG_DIR: ${{ github.workspace }}/.claude-ci-config
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Report validator version
+        run: claude --version
+
+      # --strict turns warnings (unknown fields, missing description) into
+      # errors, which is the point of running this in CI at all.
+      - name: Validate marketplace manifest
+        run: claude plugin validate . --strict
+
+      - name: Validate plugin manifest
+        run: claude plugin validate ./plugins/portable-memory --strict
+
+  test:
+    name: pytest (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest
+
+      # -ra so the reason for every skip is visible in the log: five tests are
+      # Windows-only (junctions, drive letters) and skip explicitly on POSIX,
+      # and the symlink test skips on a Windows runner without symlink rights.
+      - name: Run tests
+        run: python -m pytest -ra -p no:cacheprovider
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Pinned: an unpinned ruff changes its default rule set between releases
+      # and turns a green repo red without a code change.
+      - name: Install ruff
+        run: python -m pip install ruff==0.16.8
+
+      - name: Ruff
+        run: ruff check .
+
+      # Ship hygiene: the plugins/ subtree is what lands on a user's machine.
+      # Checked against tracked files, since that is what a marketplace install
+      # actually copies — untracked build artifacts are irrelevant here.
+      - name: No test files inside the shipped plugin
+        run: |
+          found=$(git ls-files plugins | grep -E '(^|/)(test_[^/]*\.py|[^/]*_test\.py)$|__pycache__' || true)
+          if [ -n "$found" ]; then
+            echo "These must not ship inside plugins/:"
+            echo "$found"
+            exit 1
+          fi
+          echo "OK: no test files tracked under plugins/"
+
+      # The skill must stay runnable on a machine with nothing but Python.
+      - name: Script imports only the standard library
+        run: |
+          python - <<'PY'
+          import ast, pathlib, sys
+          src = pathlib.Path(
+              "plugins/portable-memory/skills/project-local-auto-memory"
+              "/scripts/setup_project_memory.py"
+          )
+          tree = ast.parse(src.read_text(encoding="utf-8"))
+          names = set()
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Import):
+                  names.update(a.name.split(".")[0] for a in node.names)
+              elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                  names.add(node.module.split(".")[0])
+          extra = names - sys.stdlib_module_names - {"__future__"}
+          if extra:
+              sys.exit(f"non-stdlib imports in the skill script: {sorted(extra)}")
+          print(f"stdlib-only, {len(names)} imports: {sorted(names)}")
+          PY

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "claude-portable-memory",
+  "description": "Single-plugin marketplace for Portable Memory, which keeps Claude Code's auto-memory inside your project so it travels with the repo.",
+  "owner": {
+    "name": "phamvietloi",
+    "url": "https://github.com/phamvietloi"
+  },
+  "plugins": [
+    {
+      "name": "portable-memory",
+      "source": "./plugins/portable-memory",
+      "description": "Relocate Claude Code auto-memory into the project folder so it is portable, reviewable and git-trackable."
+    }
+  ]
+}

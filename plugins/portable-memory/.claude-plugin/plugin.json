@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "portable-memory",
+  "displayName": "Portable Memory",
+  "version": "0.1.0",
+  "description": "Keep Claude Code's auto-memory inside the project so it travels with the repo across machines instead of being stranded under ~/.claude/projects/<slug>/.",
+  "author": {
+    "name": "phamvietloi",
+    "url": "https://github.com/phamvietloi"
+  },
+  "repository": "https://github.com/phamvietloi/claude-portable-memory",
+  "license": "MIT",
+  "keywords": ["memory", "portability", "auto-memory", "git", "workspace"]
+}

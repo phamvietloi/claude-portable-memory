@@ -1,0 +1,23 @@
+# Dev-only config. The plugin itself ships no Python packaging and has no runtime
+# dependencies — Claude Code guarantees no interpreter, so setup_project_memory.py
+# must stay a single stdlib-only file.
+#
+# Tests deliberately live in the repo-root tests/ directory rather than inside
+# plugins/portable-memory/..., because that subtree is what gets installed onto a
+# user's machine; test files must not ship with the skill. pythonpath below is what
+# lets tests/ import the script from its install-shaped location.
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+pythonpath = ["plugins/portable-memory/skills/project-local-auto-memory/scripts"]
+addopts = "-ra"
+
+[tool.ruff]
+# Pinned explicitly rather than relying on ruff's defaults, which shift between
+# releases — CI should fail on the repo's code changing, not on ruff's opinions.
+target-version = "py310"  # the floor the CI matrix actually tests
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
